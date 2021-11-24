@@ -13,7 +13,7 @@ public class Chunk : MonoBehaviour
 
     private const double freq = 0.02;
 
-    private BlockType defaultBlock = BlockType.Void;
+    private BlockType defaultBlock = BlockType.Air;
 
     public MeshFilter meshFilter;
     public MeshCollider MeshCollider;
@@ -24,30 +24,46 @@ public class Chunk : MonoBehaviour
         return (float) noise.Evaluate((x + position.x) * 0.02, (z + position.z) * 0.02);
     }
 
-    public void PopulateChunk()
+    public bool PopulateChunk()
     {
+        bool keep = false;
+        
         for (int x = 0; x < chunkWidth; x++)
         {
             for (int z = 0; z < chunkWidth; z++)
             {
-                int grasslayer = Mathf.FloorToInt(getNoise(x, z) * 16);
-                grasslayer -= Mathf.FloorToInt(transform.position.y);
+                int grasslayer = Mathf.FloorToInt(getNoise(x, z) * 16 + chunkHeight / 1.2f);
 
                 for (int y = 0; y < chunkHeight; y++)
                 {
-                    if (noise.Evaluate((x + pos.x *chunkWidth) * freq, (y + pos.y * chunkHeight) * freq, (z + pos.z * chunkWidth) * freq) > 0.5)
+                    if (noise.Evaluate((x + pos.x *chunkWidth) * freq, y * freq, (z + pos.z * chunkWidth) * freq) > 0.5)
+                    {
                         blocks[x, y, z] = BlockType.Air;
+                    }
                     else if (y > grasslayer)
+                    {
                         blocks[x, y, z] = BlockType.Air;
+                    }
                     else if (y < grasslayer - 3)
+                    {
                         blocks[x, y, z] = BlockType.Stone;
+                        keep = true;
+                    }
                     else if (y < grasslayer)
+                    {
                         blocks[x, y, z] = BlockType.Dirt;
+                        keep = true;
+                    }
                     else
+                    {
                         blocks[x, y, z] = BlockType.Grass;
+                        keep = true;
+                    }
                 }
             }
         }
+
+        return keep;
     }
 
     public void GenerateMesh()
@@ -166,32 +182,32 @@ public class Chunk : MonoBehaviour
         {
             case ChunkDirection.Top:
             {
-                if(allChunks.TryGetValue(new Vector3(pos.x, pos.y + 1, pos.z), out Chunk c)) return c.blocks[x, y - chunkHeight, z];
+                if(loadedChunks.TryGetValue(new Vector3(pos.x, pos.y + 1, pos.z), out Chunk c)) return c.blocks[x, y - chunkHeight, z];
                 break;
             }
             case ChunkDirection.Bottom:
             {
-                if(allChunks.TryGetValue(new Vector3(pos.x, pos.y - 1, pos.z), out Chunk c)) return c.blocks[x, y + chunkHeight, z];
+                if(loadedChunks.TryGetValue(new Vector3(pos.x, pos.y - 1, pos.z), out Chunk c)) return c.blocks[x, y + chunkHeight, z];
                 break;
             }
             case ChunkDirection.Front:
             {
-                if(allChunks.TryGetValue(new Vector3(pos.x, pos.y, pos.z - 1), out Chunk c)) return c.blocks[x, y, z + chunkWidth];
+                if(loadedChunks.TryGetValue(new Vector3(pos.x, pos.y, pos.z - 1), out Chunk c)) return c.blocks[x, y, z + chunkWidth];
                 break;
             }
             case ChunkDirection.Right:
             {
-                if(allChunks.TryGetValue(new Vector3(pos.x + 1, pos.y, pos.z), out Chunk c)) return c.blocks[x - chunkWidth, y, z];
+                if(loadedChunks.TryGetValue(new Vector3(pos.x + 1, pos.y, pos.z), out Chunk c)) return c.blocks[x - chunkWidth, y, z];
                 break;
             }
             case ChunkDirection.Back:
             {
-                if(allChunks.TryGetValue(new Vector3(pos.x, pos.y, pos.z + 1), out Chunk c)) return c.blocks[x, y, z - chunkWidth];
+                if(loadedChunks.TryGetValue(new Vector3(pos.x, pos.y, pos.z + 1), out Chunk c)) return c.blocks[x, y, z - chunkWidth];
                 break;
             }
             case ChunkDirection.Left:
             {
-                if(allChunks.TryGetValue(new Vector3(pos.x - 1, pos.y, pos.z), out Chunk c)) return c.blocks[x + chunkWidth, y, z];
+                if(loadedChunks.TryGetValue(new Vector3(pos.x - 1, pos.y, pos.z), out Chunk c)) return c.blocks[x + chunkWidth, y, z];
                 break;
             }
         }

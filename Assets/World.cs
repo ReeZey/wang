@@ -1,118 +1,91 @@
-using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using UnityEditor;
+using System.Security.Cryptography;
+using System.Threading.Tasks;
 using UnityEngine;
 
 public class World : MonoBehaviour
 {
     public Transform chunkPrefab;
-    public Transform Player;
 
-    private static List<Vector3> chunksToLoad = new List<Vector3>();
+    private Queue<Vector3> chunksToLoad = new Queue<Vector3>();
+
+    private async void Start()
+    {
+        await CreateChunk(new Vector3(0, 0, 0));
+    }
+
+    [ContextMenu("DANGEROUS")]
+    private async Task DANGEROUS()
+    {
+        int yep = 10;
+        while (yep-- > 0)
+        {
+            await AnothaOne();
+            await Master();
+        }
+    }
     
-    private const int horizontalRenderDistance = 3;
-    private const int verticalRenderDistance = 1;
-
-    private const bool updatingChunks = true;
-
-    private void Start()
+    [ContextMenu("load next chunk...")]
+    private async Task Master()
     {
-        
-        StartCoroutine(CreateChunk(new Vector3Int(0, 0, 0)));
-        
-        for (int x = -horizontalRenderDistance; x < horizontalRenderDistance; x++)
+        while (chunksToLoad.Count != 0)
         {
-            for (int y = -verticalRenderDistance; y < verticalRenderDistance; y++)
-            {
-                for (int z = -horizontalRenderDistance; z < horizontalRenderDistance; z++)
-                {
-                    chunksToLoad.Add(new Vector3(x,y,z));
-                }
-            }
-        }
-        
-        
-        StartCoroutine(GoThrough());
-    }
-
-    private void FixedUpdate()
-    {
-        Vector3Int playerPosition = Vector3Int.FloorToInt(Player.position);
-
-        int xoff = (playerPosition.x / WorldSettings.chunkWidth);
-        int yoff = (playerPosition.y / WorldSettings.chunkHeight);
-        int zoff = (playerPosition.z / WorldSettings.chunkWidth);
-        
-        for (int x = -horizontalRenderDistance + xoff; x < horizontalRenderDistance + xoff; x++)
-        {
-            for (int y = -verticalRenderDistance + yoff; y < verticalRenderDistance + yoff; y++)
-            {
-                for (int z = -horizontalRenderDistance + zoff; z < horizontalRenderDistance + zoff; z++)
-                {
-                    var pang = new Vector3(x, y, z);
-                    if(!WorldSettings.allChunks.Keys.Contains(pang))
-                        chunksToLoad.Add(pang);
-                }
-            }
+            await getChunk();
         }
     }
-
-    public void wang()
+    
+    private async Task getChunk()
     {
-        StartCoroutine(GoThrough());
+        await CreateChunk(chunksToLoad.Dequeue());
     }
+    
 
-    private IEnumerator GoThrough()
+    [ContextMenu("Test Generate All Terrain")]
+    private async Task AnothaOne()
     {
-        while(true){
-            if(chunksToLoad.Count == 0) continue;
-
-            foreach (var chunk in chunksToLoad.ToArray())
-            {
-                chunksToLoad.Remove(chunk);
-                if (WorldSettings.allChunks.Keys.Contains(chunk)) continue;
-                
-                StartCoroutine(CreateChunk(chunk));
-                yield return new WaitForEndOfFrame();
-            }
-            
-            yield return new WaitForSeconds(1);
-        }
-    }
-
-    private IEnumerator CreateChunk(Vector3 pos)
-    {
-        if (WorldSettings.allChunks.Keys.Contains(pos)) yield break;
-        
-        Chunk go = Instantiate(chunkPrefab, new Vector3(pos.x * WorldSettings.chunkWidth, pos.y * WorldSettings.chunkHeight, pos.z * WorldSettings.chunkWidth), Quaternion.identity, transform).GetComponent<Chunk>();
-        WorldSettings.allChunks.Add(pos, go);
-        
-        go.pos = pos;
-        
-        go.PopulateChunk();
-        go.GenerateMesh();
-
         foreach (var direction in Constants.directions)
         {
-            if (WorldSettings.allChunks.TryGetValue(go.pos + direction, out Chunk c)) c.GenerateMesh();
+            foreach (var pair in WorldSettings.loadedChunks)
+            {
+                var chunkPos = pair.Key + direction;
+                
+                if (WorldSettings.loadedChunks.ContainsKey(chunkPos) || chunksToLoad.Contains(chunkPos)) continue;
+                
+                chunksToLoad.Enqueue(chunkPos);
+            }
         }
-    }
-}
 
-#if UNITY_EDITOR
-[CustomEditor(typeof(World)), CanEditMultipleObjects]
-public class PinInfoEditor : Editor
-{
+        await Task.Yield();
+    }
     
-    public override void OnInspectorGUI()
+    private async Task CreateChunk(Vector3 pos)
     {
-        DrawDefaultInspector();
-        if (!GUILayout.Button("Your ButtonText")) return;
+        float chunkX = pos.x * WorldSettings.chunkWidth;
+        float chunkY = pos.y * WorldSettings.chunkHeight;
+        float chunkZ = pos.z * WorldSettings.chunkWidth;
 
-        ((World) target).wang();
+        Chunk chunk = Instantiate(chunkPrefab, new Vector3(chunkX, chunkY, chunkZ), Quaternion.identity, transform).GetComponent<Chunk>();
+
+        chunk.pos = pos;
+        
+        bool keep = chunk.PopulateChunk();
+
+        if (!keep)
+        {
+            Destroy(chunk.gameObject);
+            return;
+        }
+        
+        chunk.GenerateMesh();
+
+        WorldSettings.loadedChunks.Add(pos, chunk);
+        
+        foreach (var direction in Constants.directions)
+        {
+            if (WorldSettings.loadedChunks.TryGetValue(chunk.pos + direction, out Chunk c)) c.GenerateMesh();
+        }
+
+        await Task.Yield();
     }
 }
-#endif
